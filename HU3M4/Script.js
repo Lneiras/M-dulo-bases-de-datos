@@ -28,11 +28,11 @@ db.usuarios.insertMany([
 
 
 //insertOne
-db.usuarios.insertOne([{ _id: ObjectId("60c72b2f9b1d8b2bad111111"), 
+db.usuarios.insertOne({ _id: ObjectId("60c72b2f9b1d8b2bad111114"), 
 nombre: "Laura Solano", email: "laura@email.com",
 historial_vistos: 5, 
 suscripcion: "Premium", 
-generos_favoritos: ["Sci-Fi", "Drama", "Acción"] }]);
+generos_favoritos: ["Sci-Fi", "Drama", "Acción"] });
 
 
 // los contenidos
@@ -77,7 +77,7 @@ db.valoraciones.insertMany([
 
 // CRUD
 
-// READ
+// Ver
 
 // Películas con duración > 120 min
 db.contenidos.find({
@@ -90,12 +90,113 @@ db.usuarios.find({
      historial_vistos: { $gt: 5 } 
 });
 
-// Contenidos que pertenezcan a los géneros 'Sci-Fi' o 'Comedia' ($in)
+// Contenidos que pertenezcan a los géneros 'Sci-Fi' o 'Comedia' 
 db.contenidos.find({
   generos: { $in: ["Sci-Fi", "Comedia"] }
 });
 
-// Búsqueda por patrón de texto (Regex): Títulos que contengan la palabra "Office" sin importar mayúsculas
+// Búsqueda por patrón de texto (Regex)
 db.contenidos.find({
   titulo: { $regex: "office", $options: "i" }
 });
+
+// Contenidos que sean Películas Y duren menos de 130 min
+db.contenidos.find({
+  $and: [
+    { tipo: "Película" },
+    { duracion_min: { $lt: 130 } }
+  ]
+});
+
+// Usuarios que tengan suscripción Estándar O tengan menos de 4 vistos
+db.usuarios.find({
+  $or: [
+    { suscripcion: "Estándar" },
+    { historial_vistos: { $lt: 4 } }
+  ]
+});
+
+// Actualizar 
+
+// Actualizar la calificación y comentario de una valoración
+db.valoraciones.updateOne(
+  { usuario_id: ObjectId("60c72b2f9b1d8b2bad111113"), contenido_id: ObjectId("60c72b2f9b1d8b2bad222221") },
+  { $set: { calificacion: 5, comentario: "Cambio mi opinión, es un 5/5 impecable." } }
+);
+
+// Agregar un nuevo género favorito a todos los usuarios Premium 
+db.usuarios.updateMany(
+  { suscripcion: "Premium" },
+  { $addToSet: { generos_favoritos: "Terror" } }
+);
+
+// Eliminar 
+db.contenidos.deleteOne({ titulo: "The Office" });
+
+// Índice en el campo 'titulo'
+db.contenidos.createIndex({ titulo: 1 });
+
+// Índice compuesto de valoraciones 
+db.valoraciones.createIndex({ contenido_id: 1, calificacion: -1 });
+
+// Listar los índices creados 
+db.contenidos.getIndexes();
+db.valoraciones.getIndexes();
+
+/* Pipelines */
+
+// // Calcular la calificación promedio de contenidos con calificaciones altas (>= 4)
+
+db.valoraciones.aggregate([
+  {
+    $match: { calificacion: { $gte: 4 } } // Filtrado requerido por la guía
+  },
+  {
+    $group: {
+      _id: "$contenido_id",
+      calificacion_promedio: { $avg: "$calificacion" },
+      total_votos: { $sum: 1 }
+    }
+  },
+  {
+    $lookup: {
+      from: "contenidos",
+      localField: "_id",
+      foreignField: "_id",
+      as: "detalle_contenido"
+    }
+  },
+  { $unwind: "$detalle_contenido" },
+  {
+    $project: {
+      _id: 0,
+      titulo: "$detalle_contenido.titulo",
+      calificacion_promedio: 1,
+      total_votos: 1
+    }
+  },
+  { $sort: { calificacion_promedio: -1 } }
+]);
+
+// // Contar cuántos contenidos existen por cada género 
+
+db.contenidos.aggregate([
+  {
+    $match: { tipo: "Película" } // Filtrado inicial requerido por la guía
+  },
+  { $unwind: "$generos" },
+  {
+    $group: {
+      _id: "$generos",
+      total_titulos: { $sum: 1 }
+    }
+  },
+  { $sort: { total_titulos: -1 } },
+  {
+    $project: {
+      _id: 0,
+      genero: "$_id",
+      total_titulos: 1
+    }
+  }
+]);
